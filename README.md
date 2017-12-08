@@ -5,9 +5,6 @@ Golang emitter and consumer for Hedwig
 
 ## About Hedwig
 
-Hedwig is an attempt to standardize messaging between micro-services in SOA.
+Hedwig is an attempt to standardize messaging and events between micro-services.
 
-It uses RabbitMQ as the transport and simplifies managing workers.
-
-
-
+It uses RabbitMQ as the transport and simplifies the API down significantly.
