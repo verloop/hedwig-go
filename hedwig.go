@@ -1,11 +1,11 @@
 package hedwig
 
 import (
-	"github.com/streadway/amqp"
-	"time"
 	"fmt"
+	"github.com/streadway/amqp"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Callback func(<-chan amqp.Delivery, *sync.WaitGroup)
@@ -77,6 +77,9 @@ type Hedwig struct {
 func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
 	h.Lock()
 	defer h.Unlock()
+	if h == nil {
+		return ErrNilHedwig
+	}
 	if h.conn != nil {
 		return ErrAlreadyInitialized
 	}
@@ -111,6 +114,9 @@ func (h *Hedwig) Publish(key string, body []byte) (err error) {
 }
 
 func (h *Hedwig) Consume() error {
+	if h == nil {
+		return ErrNilHedwig
+	}
 	if h.Settings.Consumer == nil {
 		return ErrNoConsumerSetting
 	}
@@ -201,6 +207,9 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 func (h *Hedwig) Disconnect() error {
 	h.Lock()
 	defer h.Unlock()
+	if h == nil {
+		return ErrNilHedwig
+	}
 	if h.conn == nil {
 		return nil
 	}
@@ -214,6 +223,9 @@ func (h *Hedwig) Disconnect() error {
 }
 
 func (h *Hedwig) connect() (err error) {
+	if h == nil {
+		return ErrNilHedwig
+	}
 	if h.conn != nil {
 		return
 	}
