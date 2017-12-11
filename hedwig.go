@@ -93,7 +93,6 @@ func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
 		qName = fmt.Sprintf("AUTO-%d-%s", len(h.Settings.Consumer.Queues), strings.Join(qSetting.Bindings, "."))
 		qSetting.Durable = false
 		qSetting.Exclusive = true
-		qSetting.AutoDelete = true
 	}
 	h.Settings.Consumer.Queues[qName] = qSetting
 	return nil
@@ -149,7 +148,6 @@ func (h *Hedwig) setupListeners() (err error) {
 			qName = ""
 			qSetting.Durable = false
 			qSetting.Exclusive = true
-			qSetting.AutoDelete = true
 		}
 		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, nil)
 		if err != nil {
