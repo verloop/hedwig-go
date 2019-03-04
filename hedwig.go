@@ -2,10 +2,17 @@ package hedwig
 
 import (
 	"fmt"
-	"github.com/streadway/amqp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/streadway/amqp"
+)
+
+const (
+	PublishChannel   = "publish"
+	SubscribeChannel = "subscribe"
 )
 
 type Callback func(<-chan amqp.Delivery, *sync.WaitGroup)
@@ -35,7 +42,7 @@ func New(settings *Settings) *Hedwig {
 	if settings == nil {
 		settings = DefaultSettings()
 	}
-	return &Hedwig{Settings: settings, wg: &sync.WaitGroup{}, channels: make(map[string]*amqp.Channel)}
+	return &Hedwig{Settings: settings, wg: &sync.WaitGroup{}, channels: make(map[string]*amqp.Channel), consumeTags: make(map[string]bool)}
 }
 
 type QueueSetting struct {
@@ -66,12 +73,13 @@ type Settings struct {
 
 type Hedwig struct {
 	sync.Mutex
-	wg         *sync.WaitGroup
-	Settings   *Settings
-	Error      error
-	conn       *amqp.Connection
-	channels   map[string]*amqp.Channel
-	closedChan chan *amqp.Error
+	wg          *sync.WaitGroup
+	Settings    *Settings
+	Error       error
+	conn        *amqp.Connection
+	channels    map[string]*amqp.Channel
+	consumeTags map[string]bool
+	closedChan  chan *amqp.Error
 }
 
 func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
@@ -102,7 +110,7 @@ func (h *Hedwig) Publish(key string, body []byte) (err error) {
 	h.Lock()
 	defer h.Unlock()
 
-	c, err := h.getChannel("publish")
+	c, err := h.getChannel(PublishChannel)
 	if err != nil {
 		return err
 	}
@@ -135,10 +143,11 @@ func (h *Hedwig) Consume() error {
 func (h *Hedwig) setupListeners() (err error) {
 	h.Lock()
 	defer h.Unlock()
-	c, err := h.getChannel("subscribe")
+	c, err := h.getChannel(SubscribeChannel)
 	if err != nil {
 		return err
 	}
+	tag := 0
 	for qName, qSetting := range h.Settings.Consumer.Queues {
 		if len(qSetting.Bindings) == 0 {
 			return ErrNoBindings
@@ -151,7 +160,6 @@ func (h *Hedwig) setupListeners() (err error) {
 		}
 		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, nil)
 		if err != nil {
-
 			return err
 		}
 		for _, binding := range qSetting.Bindings {
@@ -161,9 +169,12 @@ func (h *Hedwig) setupListeners() (err error) {
 			}
 		}
 
+		consumeTag := q.Name + "-" + strconv.Itoa(tag)
+		tag++
+		h.consumeTags[consumeTag] = true
 		delChan, err := c.Consume(
 			q.Name,
-			"",
+			consumeTag,
 			qSetting.NoAck,
 			qSetting.Exclusive,
 			false,
@@ -174,6 +185,7 @@ func (h *Hedwig) setupListeners() (err error) {
 			return err
 		}
 		h.wg.Add(1)
+
 		go qSetting.Callback(delChan, h.wg)
 	}
 	return nil
@@ -210,6 +222,18 @@ func (h *Hedwig) Disconnect() error {
 	}
 	if h.conn == nil {
 		return nil
+	}
+
+	// Close all listening channels
+	if len(h.consumeTags) > 0 {
+		c, err := h.getChannel(SubscribeChannel)
+		if err == nil {
+			for tag := range h.consumeTags {
+				go c.Cancel(tag, false)
+			}
+		}
+		h.wg.Wait()
+		h.consumeTags = make(map[string]bool)
 	}
 
 	err := h.conn.Close()
@@ -254,6 +278,7 @@ func (h *Hedwig) connect() (err error) {
 		defer h.Unlock()
 		h.conn = nil
 		h.channels = make(map[string]*amqp.Channel)
+		h.consumeTags = make(map[string]bool)
 		h.wg = &sync.WaitGroup{}
 		if h.Error == nil {
 			h.Error = closeErr

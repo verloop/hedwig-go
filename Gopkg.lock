@@ -3,13 +3,15 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:4c6e252333978a28daf21528c10e51020393dad494adef97e4c9db78c9e8350e"
   name = "github.com/streadway/amqp"
   packages = ["."]
+  pruneopts = ""
   revision = "ff791c2d22d3f1588b4e2cc71a9fba5e1da90654"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "baf1c9c4dc07eee188ef16d427c2c10c42e4ffee29207fadb3de0a731a104f9d"
+  input-imports = ["github.com/streadway/amqp"]
   solver-name = "gps-cdcl"
   solver-version = 1
