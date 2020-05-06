@@ -109,6 +109,19 @@ func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
 }
 
 func (h *Hedwig) Publish(key string, body []byte) (err error) {
+	return h.PublishWithHeaders(key, body, nil)
+}
+
+func (h *Hedwig) PublishWithDelay(key string, body []byte, delay time.Duration) (err error) {
+	// from: https://www.rabbitmq.com/blog/2015/04/16/scheduling-messages-with-rabbitmq/
+	// To delay a message a user must publish the message with the special header called x-delay which takes an integer
+	// representing the number of milliseconds the message should be delayed by RabbitMQ.
+	// It's worth noting that here delay means: delay message routing to queues or to other exchanges.
+	headers := amqp.Table{DelayHeader: delay.Milliseconds()}
+	return h.PublishWithHeaders(key, body, headers)
+}
+
+func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers amqp.Table) (err error) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -118,7 +131,8 @@ func (h *Hedwig) Publish(key string, body []byte) (err error) {
 	}
 
 	return c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
-		Body: body,
+		Body:    body,
+		Headers: headers,
 	})
 }
 
