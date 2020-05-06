@@ -20,7 +20,7 @@ type Callback func(<-chan amqp.Delivery, *sync.WaitGroup)
 func DefaultSettings() *Settings {
 	return &Settings{
 		Exchange:          "hedwig",
-		ExchangeType:      "topic",
+		ExchangeType:      amqp.ExchangeTopic,
 		HeartBeatInterval: 5 * time.Second,
 		SocketTimeout:     1 * time.Second,
 		Host:              "localhost",
