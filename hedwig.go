@@ -21,6 +21,7 @@ func DefaultSettings() *Settings {
 	return &Settings{
 		Exchange:          "hedwig",
 		ExchangeType:      amqp.ExchangeTopic,
+		ExchangeArgs:      nil,
 		HeartBeatInterval: 5 * time.Second,
 		SocketTimeout:     1 * time.Second,
 		Host:              "localhost",
@@ -61,6 +62,7 @@ type ConsumerSetting struct {
 type Settings struct {
 	Exchange          string
 	ExchangeType      string
+	ExchangeArgs      amqp.Table
 	HeartBeatInterval time.Duration
 	SocketTimeout     time.Duration
 	Host              string
@@ -207,7 +209,7 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 	}
 	err = h.channels[name].ExchangeDeclare(
 		h.Settings.Exchange, h.Settings.ExchangeType, true,
-		false, false, false, nil)
+		false, false, false, h.Settings.ExchangeArgs)
 	if err != nil {
 		return nil, err
 	}
