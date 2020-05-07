@@ -44,7 +44,7 @@ func main() {
 		for i := 0; i < 5; i++ {
 			delay := time.Duration(i*10) * time.Second
 			msg := fmt.Sprintf("I am: %d", int(delay.Seconds()))
-			log.Println("publishing: ", msg)
+			log.Println("\tPublishing: ", msg)
 			err := h.PublishWithDelay(fmt.Sprintf("%s.0", publishKey), []byte(msg), delay)
 			if err != nil {
 				log.Println("publish failed:", err)
