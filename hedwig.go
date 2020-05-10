@@ -121,7 +121,7 @@ func (h *Hedwig) PublishWithDelay(key string, body []byte, delay time.Duration) 
 	return h.PublishWithHeaders(key, body, headers)
 }
 
-func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers amqp.Table) (err error) {
+func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]interface{}) (err error) {
 	h.Lock()
 	defer h.Unlock()
 
