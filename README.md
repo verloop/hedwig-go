@@ -1,3 +1,7 @@
+# Note:
+
+Since the release of [cloudevents](https://cloudevents.io), there is no need to maintain hedwig anymore. Please use the [Go SDK](https://github.com/cloudevents/sdk-go) instead of using hedwig.
+
 # Hedwig Go
 
 Golang emitter and consumer for Hedwig
