@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
@@ -290,6 +291,7 @@ func (h *Hedwig) connect() (err error) {
 	h.conn.NotifyClose(h.closedChan)
 	go func() {
 		closeErr := <-h.closedChan
+		logrus.WithError(closeErr).Error("Recieved a connection closed event")
 		h.Lock()
 		defer h.Unlock()
 		h.conn = nil
