@@ -1,6 +1,7 @@
 package hedwig
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -131,10 +132,17 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 		return err
 	}
 
-	return c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
+	if err := c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
 		Body:    body,
 		Headers: headers,
-	})
+	}); err != nil {
+		if errors.Is(err, amqp.ErrClosed) {
+			logrus.WithError(err).Error("Publish failed, reconnecting")
+			h.closedChan <- amqp.ErrClosed
+		}
+		return err
+	}
+	return nil
 }
 
 func (h *Hedwig) Consume() error {
