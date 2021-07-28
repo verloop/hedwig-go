@@ -1,6 +1,7 @@
 package hedwig
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -131,10 +132,24 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 		return err
 	}
 
-	return c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
+	if err := c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
 		Body:    body,
 		Headers: headers,
-	})
+	}); err != nil {
+		// We already listen to closedChan [ref connect()] when connections are dropped.
+		// In most cases github.com/streadway/amqp reports it.
+		// We have observed some cases where this is not reported and we end with stale connections.
+		// Only way to resolve this to restart the service to reconnect.
+
+		// We manually check for error while publishing and if we get an error which says connection has been closed, we
+		// notify on closedChan so that hedwig reconnects to RMQ
+		if errors.Is(err, amqp.ErrClosed) {
+			logrus.WithError(err).Error("Publish failed, reconnecting")
+			h.closedChan <- amqp.ErrClosed
+		}
+		return err
+	}
+	return nil
 }
 
 func (h *Hedwig) Consume() error {
