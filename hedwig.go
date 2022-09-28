@@ -311,7 +311,7 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 		if err != nil {
 			return nil, err
 		}
-	} else if name == DelayedPublishChannel {
+	} else if name == DelayedPublishChannel && h.DelayedSettings != nil {
 		err = h.channels[name].ExchangeDeclare(
 			h.DelayedSettings.Exchange, h.DelayedSettings.ExchangeType, true,
 			false, false, false, h.DelayedSettings.ExchangeArgs,
