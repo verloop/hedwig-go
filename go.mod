@@ -7,4 +7,4 @@ require (
 	github.com/streadway/amqp v1.0.0
 )
 
-require golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13 // indirect
+require golang.org/x/sys v0.0.0-20220927170352-d9d178bc13c6 // indirect

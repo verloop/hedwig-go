@@ -76,6 +76,7 @@ type QueueSetting struct {
 	NoAck      bool
 	QueueArgs  amqp.Table
 }
+
 type ConsumerSetting struct {
 	tag    string
 	Queues map[string]*QueueSetting
