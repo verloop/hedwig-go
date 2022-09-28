@@ -333,7 +333,7 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 		// Bind our normal exchange to delayed exchange
 		h.channels[name].ExchangeBind(
 			h.Settings.Exchange,
-			"*",
+			"#",
 			h.DelayedSettings.Exchange,
 			false,
 			nil,
