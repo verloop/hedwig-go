@@ -133,6 +133,7 @@ func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
 }
 
 func (h *Hedwig) PublishWithContext(ctx context.Context, key string, body []byte) (err error) {
+	logrus.Info("Publish Request", key, body)
 	return h.DoPublish(ctx, h.Settings.Exchange, PublishChannel, key, body, nil)
 }
 
@@ -149,6 +150,8 @@ func (h *Hedwig) DoPublish(ctx context.Context, exchange, channel, key string, b
 	if err != nil {
 		return err
 	}
+
+	logrus.Info("Got Channel for", exchange)
 
 	if err := c.Publish(exchange, key, false, false, amqp.Publishing{
 		Body:    body,
@@ -313,8 +316,8 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 		}
 	} else if name == DelayedPublishChannel {
 		err = h.channels[name].ExchangeDeclare(
-			h.Settings.Exchange, h.Settings.ExchangeType, true,
-			false, false, false, h.Settings.ExchangeArgs,
+			h.DelayedSettings.Exchange, h.DelayedSettings.Exchange, true,
+			false, false, false, h.DelayedSettings.ExchangeArgs,
 		)
 
 		if err != nil {
