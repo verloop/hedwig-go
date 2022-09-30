@@ -8,5 +8,6 @@ const (
 	DelayedExchangeArgKey = "x-delayed-type"
 	// Following header should be used when you are publishing to an Delay exchange. The header value will be
 	// delay in milliseconds
-	DelayHeader = "x-delay"
+	DelayHeader      = "x-delay"
+	MessageTTLArgKey = "x-message-ttl"
 )

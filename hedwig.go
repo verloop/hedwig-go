@@ -1,6 +1,8 @@
 package hedwig
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,8 +14,9 @@ import (
 )
 
 const (
-	PublishChannel   = "publish"
-	SubscribeChannel = "subscribe"
+	PublishChannel        = "publish"
+	DelayedPublishChannel = "publish_delay"
+	SubscribeChannel      = "subscribe"
 )
 
 type Callback func(<-chan amqp.Delivery, *sync.WaitGroup)
@@ -32,6 +35,20 @@ func DefaultSettings() *Settings {
 	}
 }
 
+func DefaultDelayedSettings() *Settings {
+	return &Settings{
+		Exchange:          "hedwig-delayed",
+		ExchangeType:      ExchangeTypeDelayed,
+		ExchangeArgs:      amqp.Table{DelayedExchangeArgKey: amqp.ExchangeTopic},
+		HeartBeatInterval: 5 * time.Second,
+		SocketTimeout:     1 * time.Second,
+		Host:              "localhost",
+		Port:              5672,
+		Consumer: &ConsumerSetting{
+			Queues: make(map[string]*QueueSetting)},
+	}
+}
+
 func DefaultQueueSetting(callback Callback, bindings ...string) *QueueSetting {
 	return &QueueSetting{
 		Bindings: bindings,
@@ -40,11 +57,14 @@ func DefaultQueueSetting(callback Callback, bindings ...string) *QueueSetting {
 	}
 }
 
-func New(settings *Settings) *Hedwig {
-	if settings == nil {
-		settings = DefaultSettings()
+func New(exchangeSettings *Settings, delayedExchangeSettings *Settings) *Hedwig {
+	if exchangeSettings == nil {
+		exchangeSettings = DefaultSettings()
 	}
-	return &Hedwig{Settings: settings, wg: &sync.WaitGroup{}, channels: make(map[string]*amqp.Channel), consumeTags: make(map[string]bool)}
+	if delayedExchangeSettings == nil {
+		delayedExchangeSettings = DefaultDelayedSettings()
+	}
+	return &Hedwig{Settings: exchangeSettings, DelayedSettings: delayedExchangeSettings, wg: &sync.WaitGroup{}, channels: make(map[string]*amqp.Channel), consumeTags: make(map[string]bool)}
 }
 
 type QueueSetting struct {
@@ -54,7 +74,9 @@ type QueueSetting struct {
 	AutoDelete bool
 	Exclusive  bool
 	NoAck      bool
+	QueueArgs  amqp.Table
 }
+
 type ConsumerSetting struct {
 	tag    string
 	Queues map[string]*QueueSetting
@@ -76,13 +98,14 @@ type Settings struct {
 
 type Hedwig struct {
 	sync.Mutex
-	wg          *sync.WaitGroup
-	Settings    *Settings
-	Error       error
-	conn        *amqp.Connection
-	channels    map[string]*amqp.Channel
-	consumeTags map[string]bool
-	closedChan  chan *amqp.Error
+	wg              *sync.WaitGroup
+	Settings        *Settings
+	DelayedSettings *Settings
+	Error           error
+	conn            *amqp.Connection
+	channels        map[string]*amqp.Channel
+	consumeTags     map[string]bool
+	closedChan      chan *amqp.Error
 }
 
 func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
@@ -109,10 +132,50 @@ func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
 	return nil
 }
 
+func (h *Hedwig) PublishWithContext(ctx context.Context, key string, body []byte) (err error) {
+	return h.DoPublish(ctx, h.Settings.Exchange, PublishChannel, key, body, nil)
+}
+
+func (h *Hedwig) DelayedPublishWithContext(ctx context.Context, key string, body []byte, delay time.Duration) (err error) {
+	headers := amqp.Table{DelayHeader: delay.Milliseconds()}
+	return h.DoPublish(ctx, h.DelayedSettings.Exchange, DelayedPublishChannel, key, body, headers)
+}
+
+func (h *Hedwig) DoPublish(ctx context.Context, exchange, channel, key string, body []byte, headers map[string]interface{}) error {
+	h.Lock()
+	defer h.Unlock()
+
+	c, err := h.getChannel(channel)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Publish(exchange, key, false, false, amqp.Publishing{
+		Body:    body,
+		Headers: headers,
+	}); err != nil {
+		// We already listen to closedChan [ref connect()] when connections are dropped.
+		// In most cases github.com/streadway/amqp reports it.
+		// We have observed some cases where this is not reported and we end with stale connections.
+		// Only way to resolve this to restart the service to reconnect.
+
+		// We manually check for error while publishing and if we get an error which says connection has been closed, we
+		// notify on closedChan so that hedwig reconnects to RMQ
+		if errors.Is(err, amqp.ErrClosed) {
+			logrus.WithError(err).Error("Publish failed, reconnecting")
+			h.closedChan <- amqp.ErrClosed
+		}
+		return err
+	}
+	return nil
+}
+
+// Deprecated, use PublishWithContext
 func (h *Hedwig) Publish(key string, body []byte) (err error) {
 	return h.PublishWithHeaders(key, body, nil)
 }
 
+// Deprecated, use DelayedPublishWithContext
 func (h *Hedwig) PublishWithDelay(key string, body []byte, delay time.Duration) (err error) {
 	// from: https://www.rabbitmq.com/blog/2015/04/16/scheduling-messages-with-rabbitmq/
 	// To delay a message a user must publish the message with the special header called x-delay which takes an integer
@@ -122,6 +185,7 @@ func (h *Hedwig) PublishWithDelay(key string, body []byte, delay time.Duration) 
 	return h.PublishWithHeaders(key, body, headers)
 }
 
+// Deprecated, use DoPublish
 func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]interface{}) (err error) {
 	h.Lock()
 	defer h.Unlock()
@@ -131,12 +195,27 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 		return err
 	}
 
-	return c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
+	if err := c.Publish(h.Settings.Exchange, key, false, false, amqp.Publishing{
 		Body:    body,
 		Headers: headers,
-	})
+	}); err != nil {
+		// We already listen to closedChan [ref connect()] when connections are dropped.
+		// In most cases github.com/streadway/amqp reports it.
+		// We have observed some cases where this is not reported and we end with stale connections.
+		// Only way to resolve this to restart the service to reconnect.
+
+		// We manually check for error while publishing and if we get an error which says connection has been closed, we
+		// notify on closedChan so that hedwig reconnects to RMQ
+		if errors.Is(err, amqp.ErrClosed) {
+			logrus.WithError(err).Error("Publish failed, reconnecting")
+			h.closedChan <- amqp.ErrClosed
+		}
+		return err
+	}
+	return nil
 }
 
+// We continue to consume from the original hedwig exchange
 func (h *Hedwig) Consume() error {
 	if h == nil {
 		return ErrNilHedwig
@@ -175,11 +254,12 @@ func (h *Hedwig) setupListeners() (err error) {
 			qSetting.Durable = false
 			qSetting.Exclusive = true
 		}
-		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, nil)
+		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, qSetting.QueueArgs)
 		if err != nil {
 			return err
 		}
 		for _, binding := range qSetting.Bindings {
+			// We only bind to the hedwig exchange
 			err := c.QueueBind(q.Name, binding, h.Settings.Exchange, false, nil)
 			if err != nil {
 				return err
@@ -222,15 +302,49 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 	if err != nil {
 		return nil, err
 	}
-	err = h.channels[name].ExchangeDeclare(
-		h.Settings.Exchange, h.Settings.ExchangeType, true,
-		false, false, false, h.Settings.ExchangeArgs)
+
+	if name == PublishChannel || name == SubscribeChannel {
+		err = h.channels[name].ExchangeDeclare(
+			h.Settings.Exchange, h.Settings.ExchangeType, true,
+			false, false, false, h.Settings.ExchangeArgs,
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else if name == DelayedPublishChannel && h.DelayedSettings != nil {
+		err = h.channels[name].ExchangeDeclare(
+			h.DelayedSettings.Exchange, h.DelayedSettings.ExchangeType, true,
+			false, false, false, h.DelayedSettings.ExchangeArgs,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		// Make sure we have an normal exchange declared
+		_, err := h.getChannel(PublishChannel)
+		if err != nil {
+			return nil, err
+		}
+
+		// Bind our normal exchange to delayed exchange
+		h.channels[name].ExchangeBind(
+			h.Settings.Exchange,
+			"#",
+			h.DelayedSettings.Exchange,
+			false,
+			nil,
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}
 	return h.channels[name], nil
 }
 
+// Both hedwig exchange and delayed exchange will use the same broker
+// hence no need to update here. The same connection object can be used.
 func (h *Hedwig) Disconnect() error {
 	h.Lock()
 	defer h.Unlock()
@@ -261,6 +375,8 @@ func (h *Hedwig) Disconnect() error {
 	return nil
 }
 
+// Both hedwig exchange and delayed exchange will use the same broker
+// hence no need to update here. The same connection object can be used.
 func (h *Hedwig) connect() (err error) {
 	if h == nil {
 		return ErrNilHedwig
