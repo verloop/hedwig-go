@@ -37,7 +37,7 @@ func DefaultSettings() *Settings {
 
 func DefaultDelayedSettings() *Settings {
 	return &Settings{
-		Exchange:          "hedwig-delay",
+		Exchange:          "hedwig-delayed",
 		ExchangeType:      ExchangeTypeDelayed,
 		ExchangeArgs:      amqp.Table{DelayedExchangeArgKey: amqp.ExchangeTopic},
 		HeartBeatInterval: 5 * time.Second,
