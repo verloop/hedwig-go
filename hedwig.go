@@ -179,6 +179,10 @@ func (h *Hedwig) setupListeners() (err error) {
 	if err != nil {
 		return err
 	}
+	err = c.Qos(500, 0, false)
+	if err != nil {
+		return err
+	}
 	tag := 0
 	for qName, qSetting := range h.Settings.Consumer.Queues {
 		if len(qSetting.Bindings) == 0 {
