@@ -128,6 +128,7 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 	defer h.Unlock()
 
 	c, err := h.getChannel(PublishChannel)
+	c.
 	if err != nil {
 		return err
 	}
@@ -176,6 +177,10 @@ func (h *Hedwig) setupListeners() (err error) {
 	h.Lock()
 	defer h.Unlock()
 	c, err := h.getChannel(SubscribeChannel)
+	if err != nil {
+		return err
+	}
+	err = c.Qos(100, 0, true)
 	if err != nil {
 		return err
 	}
