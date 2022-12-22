@@ -128,7 +128,6 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 	defer h.Unlock()
 
 	c, err := h.getChannel(PublishChannel)
-	c.
 	if err != nil {
 		return err
 	}
