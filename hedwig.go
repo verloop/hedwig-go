@@ -305,7 +305,11 @@ func (h *Hedwig) connect() (err error) {
 
 	h.conn.NotifyClose(h.closedChan)
 	go func() {
-		closeErr := <-h.closedChan
+		closeErr, ok := <-h.closedChan
+		if !ok {
+			logrus.Warning("closedChan is closed")
+			return
+		}
 		logrus.WithError(closeErr).Error("Recieved a connection closed event")
 		h.Lock()
 		defer h.Unlock()
