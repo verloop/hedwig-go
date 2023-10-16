@@ -77,13 +77,14 @@ type Settings struct {
 
 type Hedwig struct {
 	sync.Mutex
-	wg          *sync.WaitGroup
-	Settings    *Settings
-	Error       error
-	conn        *amqp.Connection
-	channels    map[string]*amqp.Channel
-	consumeTags map[string]bool
-	closedChan  chan *amqp.Error
+	wg              *sync.WaitGroup
+	Settings        *Settings
+	Error           error
+	conn            *amqp.Connection
+	channels        map[string]*amqp.Channel
+	consumeTags     map[string]bool
+	closedChan      chan *amqp.Error
+	customCloseChan chan *amqp.Error
 }
 
 func (h *Hedwig) AddQueue(qSetting *QueueSetting, qName string) error {
@@ -142,10 +143,10 @@ func (h *Hedwig) PublishWithHeaders(key string, body []byte, headers map[string]
 		// Only way to resolve this to restart the service to reconnect.
 
 		// We manually check for error while publishing and if we get an error which says connection has been closed, we
-		// notify on closedChan so that hedwig reconnects to RMQ
+		// notify on customCloseChan so that hedwig reconnects to RMQ
 		if errors.Is(err, amqp.ErrClosed) {
 			logrus.WithError(err).Error("Publish failed, reconnecting")
-			h.closedChan <- amqp.ErrClosed
+			h.customCloseChan <- amqp.ErrClosed
 		}
 		return err
 	}
@@ -302,12 +303,32 @@ func (h *Hedwig) connect() (err error) {
 		return
 	}
 	h.closedChan = make(chan *amqp.Error)
+	h.customCloseChan = make(chan *amqp.Error)
 
 	h.conn.NotifyClose(h.closedChan)
 	go func() {
 		closeErr, ok := <-h.closedChan
 		if !ok {
 			logrus.Warning("closedChan is closed")
+			return
+		}
+		logrus.WithError(closeErr).Error("Recieved a connection closed event")
+		h.Lock()
+		defer h.Unlock()
+		h.conn = nil
+		h.channels = make(map[string]*amqp.Channel)
+		h.consumeTags = make(map[string]bool)
+		h.wg = &sync.WaitGroup{}
+		if h.Error == nil {
+			h.Error = closeErr
+		}
+
+	}()
+
+	go func() {
+		closeErr, ok := <-h.customCloseChan
+		if !ok {
+			logrus.Warning("customCloseChan is closed")
 			return
 		}
 		logrus.WithError(closeErr).Error("Recieved a connection closed event")
