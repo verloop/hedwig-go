@@ -2,12 +2,12 @@
 
 
 [[projects]]
-  digest = "1:2f8f9b60ebe029a83f92a7549926145eb6014c01d256946058a5a8768efd4522"
+  digest = "1:c987d840580e13e3d5c36b40522a788ac219bb18a8d5c495e609f4c61cc9a562"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
   pruneopts = ""
-  revision = "6699a89a232f3db797f2e280639854bbc4b89725"
-  version = "v1.7.0"
+  revision = "f8bf7650dccb756cea26edaf9217aab85500fe07"
+  version = "v1.9.0"
 
 [[projects]]
   digest = "1:cd6cc5fd9292f991aff941df146e952f11630748cba7283a55bc401637eb7661"
@@ -18,8 +18,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:594d603597b627bbff78db79cddc8eb83c88282974f5e79aed816c118d0ae062"
+  digest = "1:83131fc1dce53e0e01be533bb49cce35b12a4a64fede2589967cdd44d7f2b5e0"
   name = "golang.org/x/sys"
   packages = [
     "internal/unsafeheader",
@@ -27,7 +26,8 @@
     "windows",
   ]
   pruneopts = ""
-  revision = "eeed37f84f13f52d35e095e8023ba65671ff86a1"
+  revision = "fc697a31fa06b616162e34fd66047ab52722ba6c"
+  version = "v0.2.0"
 
 [solve-meta]
   analyzer-name = "dep"
