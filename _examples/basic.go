@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/ofpiyush/hedwig-go"
-	"github.com/streadway/amqp"
 	"log"
 	"os"
 	"sync"
 	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/verloop/hedwig-go"
 )
 
 func main() {
