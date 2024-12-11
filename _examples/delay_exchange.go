@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/ofpiyush/hedwig-go"
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
+
 )
 
 // this is a short example which explains how to setup a delay exchange queue
