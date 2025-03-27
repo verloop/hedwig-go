@@ -270,7 +270,7 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 	if err != nil {
 		return nil, err
 	}
-	err = channel.Qos(getIntEnv(QosPrefetchCount, true, 0), 0, false)
+	err = channel.Qos(getIntEnv(QosPrefetchCount, false, 5000), 0, false)
 	if err != nil {
 		return nil, err
 	}
