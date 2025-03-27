@@ -3,6 +3,7 @@ package hedwig
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ const (
 
 const (
 	MinDeliveryLimit uint = 1
+	QosPrefetchCount      = "RMQ_PREFETCH_COUNT"
 )
 
 type Callback func(<-chan amqp.Delivery, *sync.WaitGroup)
@@ -264,16 +266,21 @@ func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
 		return nil, err
 	}
 
-	h.channels[name], err = h.conn.Channel()
+	channel, err := h.conn.Channel()
 	if err != nil {
 		return nil, err
 	}
-	err = h.channels[name].ExchangeDeclare(
+	err = channel.Qos(getIntEnv(QosPrefetchCount, true, 0), 0, false)
+	if err != nil {
+		return nil, err
+	}
+	err = channel.ExchangeDeclare(
 		h.Settings.Exchange, h.Settings.ExchangeType, true,
 		false, false, false, h.Settings.ExchangeArgs)
 	if err != nil {
 		return nil, err
 	}
+	h.channels[name] = channel
 	return h.channels[name], nil
 }
 
@@ -375,4 +382,19 @@ func (h *Hedwig) connect() (err error) {
 	}()
 
 	return
+}
+
+func getIntEnv(key string, required bool, defaultValue int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		if required {
+			logrus.Fatalf("%s not provided", key)
+		}
+		return defaultValue
+	}
+	intVal, err := strconv.Atoi(val)
+	if err != nil {
+		logrus.Fatalf("Invalid value provided for Key: %s", key)
+	}
+	return intVal
 }
