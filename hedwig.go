@@ -3,6 +3,7 @@ package hedwig
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -76,6 +77,10 @@ type QueueSetting struct {
 	// Note: This setting has no effect on Classic queues, which do not support delivery limits.
 	// Caution: Once set, the DeliveryLimit cannot be updated during the lifetime of the queue.
 	DeliveryLimit uint
+	// Args are extra arguments for declaring the queue, such as "x-expires".
+	// QueueType and DeliveryLimit take precedence over the same keys here.
+	// Caution: RabbitMQ refuses to declare an existing queue again with different arguments.
+	Args amqp.Table
 }
 type ConsumerSetting struct {
 	tag    string
@@ -212,18 +217,7 @@ func (h *Hedwig) setupListeners() (err error) {
 			qSetting.Durable = false
 			qSetting.Exclusive = true
 		}
-		var queueArgs amqp.Table
-		if qSetting.QueueType == QueueType_Quorum {
-			queueArgs = amqp.Table{
-				"x-queue-type": "quorum",
-			}
-			deliveryLimit := MinDeliveryLimit
-			if qSetting.DeliveryLimit > deliveryLimit {
-				deliveryLimit = qSetting.DeliveryLimit
-			}
-			queueArgs["x-delivery-limit"] = int32(deliveryLimit)
-		}
-		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, queueArgs)
+		q, err := c.QueueDeclare(qName, qSetting.Durable, qSetting.AutoDelete, qSetting.Exclusive, false, qSetting.queueArgs())
 		if err != nil {
 			return err
 		}
@@ -255,6 +249,20 @@ func (h *Hedwig) setupListeners() (err error) {
 	}
 	return nil
 
+}
+
+// queueArgs are the arguments the queue is declared with: a copy of Args,
+// then the queue type and delivery limit. It is nil when there are none.
+func (qSetting *QueueSetting) queueArgs() amqp.Table {
+	args := maps.Clone(qSetting.Args)
+	if qSetting.QueueType == QueueType_Quorum {
+		if args == nil {
+			args = amqp.Table{}
+		}
+		args["x-queue-type"] = "quorum"
+		args["x-delivery-limit"] = int32(max(qSetting.DeliveryLimit, MinDeliveryLimit))
+	}
+	return args
 }
 
 func (h *Hedwig) getChannel(name string) (ch *amqp.Channel, err error) {
